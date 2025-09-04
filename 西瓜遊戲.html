@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>西瓜遊戲 - 連鎖合成（SAT 立即檢查版）</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { margin:0; background:#f9f9f9; font-family: Arial, "Noto Sans TC", sans-serif; text-align:center; }
+    canvas { background:#fff8e1; border:2px solid #999; display:block; margin:16px auto; border-radius:8px; touch-action:none; }
+    #score { font-size:20px; margin-top:8px; }
+    #controls { margin-top:8px; }
+    button { padding:8px 14px; font-size:14px; margin:6px; }
+    #gameOver { display:none; color:#c0392b; font-size:26px; margin-top:12px; }
+    p.hint { color:#666; font-size:13px; }
+  </style>
+</head>
+<body>
+  <h1>西瓜遊戲 - 連鎖合成（SAT 立即檢查版）🍉</h1>
+  <div id="score">分數：0</div>
+  <div id="controls">
+    <button id="startBtn">開始遊戲</button>
+    <button id="restartBtn">重新開始</button>
+  </div>
+  <div id="gameOver">🎮 遊戲結束！</div>
+  <p class="hint">操作：空白 = 產生水果；← → = 左右移動（放下前）；↓ = 放下 / 加速。請開啟 F12 的 Console 觀察合成 log。</p>
+  <canvas id="game" width="400" height="600" tabindex="0"></canvas>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <script>
+    (function(){
+      const { Engine, Render, Runner, World, Bodies, Body, Events, Composite, Vector, SAT } = Matter;
+
+      const WIDTH = 400, HEIGHT = 600;
+      const fruitNames = ["🍒","🍓","🍇","🍊","🍐","🍎","🍉"];
+      const baseRadii = [20,25,30,35,40,45,50];
+      const GROWTH_SCALE_PER_LEVEL = 0.16; // 每次合成額外放大 16%
+
+      // engine & world
+      const engine = Engine.create();
+      engine.gravity.y = 1;
+      const world = engine.world;
+
+      // canvas & render
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+
+      const render = Render.create({
+        canvas: canvas,
+        engine: engine,
+        options: {
+          width: WIDTH,
+          height: HEIGHT,
+          wireframes: false,
+          background: '#fff8e1'
+        }
+      });
+      Render.run(render);
+      const runner = Runner.create();
+      Runner.run(runner, engine);
+
+      // static boundaries
+      const ground = Bodies.rectangle(WIDTH/2, HEIGHT + 30, WIDTH, 60, { isStatic: true });
+      const leftWall = Bodies.rectangle(-10, HEIGHT/2, 20, HEIGHT, { isStatic: true });
+      const rightWall = Bodies.rectangle(WIDTH + 10, HEIGHT/2, 20, HEIGHT, { isStatic: true });
+      World.add(world, [ground, leftWall, rightWall]);
+
+      // state
+      let currentFruit = null;
+      let score = 0;
+      let gameOver = false;
+      let fruitIsFalling = false;
+
+      const scoreEl = document.getElementById('score');
+      const gameOverEl = document.getElementById('gameOver');
+      const startBtn = document.getElementById('startBtn');
+      const restartBtn = document.getElementById('restartBtn');
+
+      // helpers
+      function computeRadius(idx, growthLevel=0) {
+        const base = baseRadii[idx] || 20;
+        return Math.max(8, Math.round(base * (1 + growthLevel * GROWTH_SCALE_PER_LEVEL)));
+      }
+
+      function createFruit(x, idx, isStatic = true, growthLevel = 0) {
+        const r = computeRadius(idx, growthLevel);
+        const fruit = Bodies.circle(x, 80, r, {
+          restitution: 0.2,
+          friction: 0.005,
+          label: 'fruit',
+          isStatic: !!isStatic
+        });
+        fruit.fruitIndex = idx;
+        fruit.fruitName = fruitNames[idx];
+        fruit.growthLevel = growthLevel;
+        fruit.radiusBase = r;
+        return fruit;
+      }
+
+      function spawnFruit() {
+        if (gameOver) return;
+        if (currentFruit) return;
+        currentFruit = createFruit(WIDTH/2, 0, true, 0);
+        World.add(world, currentFruit);
+        fruitIsFalling = false;
+      }
+
+      // particles (簡單)
+      const particles = [];
+      function spawnParticles(x,y,emoji) {
+        for (let i=0;i<12;i++){
+          particles.push({
+            x,y,
+            vx:(Math.random()-0.5)*4,
+            vy:(Math.random()-1.5)*4,
+            life:30+Math.random()*30,
+            emoji,
+            size:10+Math.random()*10
+          });
+        }
+      }
+      function drawParticles(ctx){
+        for (let i=particles.length-1;i>=0;i--){
+          const p = particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.15;
+          p.life--;
+          ctx.globalAlpha = Math.max(0, p.life/60);
+          ctx.font = `${p.size}px Arial`;
+          ctx.fillText(p.emoji, p.x, p.y);
+          ctx.globalAlpha = 1;
+          if (p.life<=0) particles.splice(i,1);
+        }
+      }
+
+      // render emoji & particles
+      Events.on(render, 'afterRender', function() {
+        const ctx = render.context;
+        ctx.clearRect(0,0,WIDTH,HEIGHT);
+        ctx.fillStyle = '#fff8e1';
+        ctx.fillRect(0,0,WIDTH,HEIGHT);
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const bodies = Composite.allBodies(world);
+        for (let body of bodies) {
+          if (body.fruitIndex !== undefined) {
+            const r = body.radiusBase || 20;
+            const fontSize = Math.max(18, Math.round(r * 1.15));
+            ctx.font = `${fontSize}px Arial`;
+            // shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.08)';
+            ctx.beginPath();
+            ctx.ellipse(body.position.x + 4, body.position.y + r*0.35, r*0.9, r*0.45, 0, 0, Math.PI*2);
+            ctx.fill();
+            // white circle
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(body.position.x, body.position.y, r*0.98, 0, Math.PI*2);
+            ctx.fill();
+            // emoji
+            ctx.fillStyle = '#000';
+            ctx.fillText(body.fruitName, body.position.x, body.position.y + 1);
+          }
+        }
+        drawParticles(ctx);
+      });
+
+      // Merge two bodies: remove 'other', scale/update 'survivor' in-place if possible, return the survivor (or new body)
+      function mergeBodies(survivor, other) {
+        if (!survivor || !other) return null;
+        if (survivor.merging || other.merging) return null;
+        survivor.merging = true;
+        other.merging = true;
+
+        const ia = survivor.fruitIndex;
+        if (ia === undefined || survivor.fruitIndex !== other.fruitIndex) {
+          survivor.merging = false; other.merging = false; return null;
+        }
+        if (ia >= fruitNames.length - 1) {
+          survivor.merging = false; other.merging = false; return null;
+        }
+
+        const newIdx = ia + 1;
+        const newGrowth = Math.max(survivor.growthLevel||0, other.growthLevel||0) + 1;
+        const survivorIsStatic = !!survivor.isStatic;
+        const pos = { x: survivor.position.x, y: survivor.position.y };
+        const vel = { x: survivor.velocity?.x || 0, y: survivor.velocity?.y || 0 };
+
+        console.log(`MERGE: merging other ${other.id} into survivor ${survivor.id} -> idx ${newIdx}`);
+
+        // remove other immediately
+        try { World.remove(world, other); } catch(e){ console.warn('remove other failed', e); }
+
+        // compute radii & scale factor
+        const oldR = survivor.radiusBase || computeRadius(ia, survivor.growthLevel || 0);
+        const targetR = computeRadius(newIdx, newGrowth);
+        const scaleFactor = targetR / oldR;
+
+        // try to scale in-place
+        try {
+          Body.scale(survivor, scaleFactor, scaleFactor);
+          // update survivor props
+          survivor.fruitIndex = newIdx;
+          survivor.fruitName = fruitNames[newIdx];
+          survivor.growthLevel = newGrowth;
+          survivor.radiusBase = targetR;
+          Body.setStatic(survivor, survivorIsStatic);
+          if (!survivorIsStatic) Body.setVelocity(survivor, vel);
+          else Body.setVelocity(survivor, { x:0, y:0 });
+          // update bounds (ensure SAT sees updated shape)
+          // re-position to same place to trigger bounds update
+          Body.setPosition(survivor, pos);
+          spawnParticles(pos.x, pos.y, fruitNames[newIdx]);
+          score += (newIdx + 1) * 10;
+          scoreEl.textContent = `分數：${score}`;
+          console.log(`MERGE succeeded: survivor ${survivor.id} -> idx ${newIdx}, growth ${newGrowth}`);
+          // clear merging flag quickly
+          survivor.merging = false;
+          return survivor;
+        } catch (err) {
+          console.warn('Body.scale failed, fallback replace-in-place', err);
+        }
+
+        // fallback: replace survivor with new body at same pos
+        try { World.remove(world, survivor); } catch(e){ console.warn('fallback remove survivor failed', e); }
+        const nf = createFruit(pos.x, newIdx, survivorIsStatic, newGrowth);
+        if (!survivorIsStatic) Body.setVelocity(nf, vel);
+        else Body.setVelocity(nf, { x:0, y:0 });
+        World.add(world, nf);
+        spawnParticles(pos.x, pos.y, fruitNames[newIdx]);
+        score += (newIdx + 1) * 10;
+        scoreEl.textContent = `分數：${score}`;
+        console.log(`MERGE fallback created new body id:${nf.id} idx:${newIdx}`);
+        // clear merging on new body after a tick
+        setTimeout(()=> { try{ nf.merging = false; } catch(e){} }, 20);
+        return nf;
+      }
+
+      // After a merge on a survivor, immediately check all bodies for SAT overlap and chain-merge until none
+      function chainMergeIfNeeded(initialSurvivor) {
+        let survivor = initialSurvivor;
+        if (!survivor) return;
+        // loop: scan for any body that currently collides with survivor and has same index
+        let changed = true;
+        // small safety counter to avoid infinite loops
+        let safety = 0;
+        while (changed && safety < 30) {
+          changed = false;
+          safety++;
+          const all = Composite.allBodies(world);
+          for (let b of all) {
+            if (b === survivor) continue;
+            if (b.fruitIndex === undefined) continue;
+            if (b.fruitIndex !== survivor.fruitIndex) continue;
+            // use SAT to check collision/overlap immediately
+            try {
+              const C = SAT.collides(survivor, b);
+              if (C.collided) {
+                console.log(`CHAIN: found overlapping neighbor ${b.id} for survivor ${survivor.id}, merging...`);
+                const newSurv = mergeBodies(survivor, b);
+                if (newSurv) {
+                  survivor = newSurv;
+                  changed = true;
+                  // break to restart scanning with updated survivor index/shape
+                  break;
+                }
+              }
+            } catch (e) {
+              console.warn('SAT.collides error', e);
+            }
+          }
+        }
+      }
+
+      // collisionStart: detect merge opportunity, perform merge + chain
+      Events.on(engine, 'collisionStart', function(event) {
+        const pairs = event.pairs;
+        for (let pair of pairs) {
+          const A = pair.bodyA, B = pair.bodyB;
+          if (A.fruitIndex === undefined || B.fruitIndex === undefined) continue;
+          const ia = A.fruitIndex, ib = B.fruitIndex;
+          if (ia !== ib) continue;
+          if (ia >= fruitNames.length - 1) continue; // max
+          // skip if processing
+          if (A.merging || B.merging) continue;
+
+          // choose survivor (prefer static)
+          function speedOf(x){ return Math.hypot((x.velocity?.x)||0, (x.velocity?.y)||0); }
+          let survivor = null, other = null;
+          if (A.isStatic && !B.isStatic) { survivor = A; other = B; }
+          else if (B.isStatic && !A.isStatic) { survivor = B; other = A; }
+          else {
+            survivor = speedOf(A) <= speedOf(B) ? A : B;
+            other = survivor === A ? B : A;
+          }
+
+          console.log(`MERGE detected: idx=${ia} -> newIdx=${ia+1}; survivor=${survivor.id}, other=${other.id}`);
+
+          const newSurv = mergeBodies(survivor, other);
+          if (newSurv) {
+            // Immediately check & chain merge using SAT overlap
+            chainMergeIfNeeded(newSurv);
+          }
+        }
+      });
+
+      // afterUpdate: cleanup & game over check
+      Events.on(engine, 'afterUpdate', function() {
+        if (currentFruit && fruitIsFalling && currentFruit.position.y > 120) {
+          currentFruit = null;
+          fruitIsFalling = false;
+        }
+        for (let b of Composite.allBodies(world)) {
+          if (b.fruitIndex !== undefined) {
+            if ((b.position.y - (b.radiusBase || 20)) < 6) {
+              endGame();
+              break;
+            }
+            if (b.position.y > HEIGHT + 400) {
+              try { World.remove(world, b); } catch(e){}
+            }
+          }
+        }
+      });
+
+      // keyboard & click
+      document.addEventListener('keydown', function(e) {
+        if (gameOver) return;
+        if (e.key === ' ') {
+          if (!currentFruit) spawnFruit();
+          e.preventDefault();
+          return;
+        }
+        if (!currentFruit) return;
+        if (!fruitIsFalling) {
+          if (e.key === 'ArrowLeft') Body.translate(currentFruit, { x: -28, y: 0 });
+          else if (e.key === 'ArrowRight') Body.translate(currentFruit, { x: 28, y: 0 });
+          else if (e.key === 'ArrowDown') { Body.setStatic(currentFruit, false); fruitIsFalling = true; }
+        } else {
+          if (e.key === 'ArrowDown') Body.setVelocity(currentFruit, { x: 0, y: 10 });
+        }
+      });
+
+      window.addEventListener('click', spawnFruit);
+
+      function startGame() {
+        gameOver = false;
+        score = 0;
+        scoreEl.textContent = '分數：0';
+        gameOverEl.style.display = 'none';
+        const all = Composite.allBodies(world).slice();
+        for (let b of all) {
+          if (b.fruitIndex !== undefined) {
+            try { World.remove(world, b); } catch(e){}
+          }
+        }
+        currentFruit = null;
+        fruitIsFalling = false;
+        Runner.run(runner, engine);
+        try { canvas.focus(); } catch(e){}
+        console.log('Game started. spawn with SPACE or click the canvas. Open F12 to view merge logs.');
+      }
+
+      function endGame() {
+        if (gameOver) return;
+        gameOver = true;
+        gameOverEl.style.display = 'block';
+        Runner.stop(runner);
+      }
+
+      startBtn.addEventListener('click', startGame);
+      restartBtn.addEventListener('click', startGame);
+
+      startGame();
+      canvas.addEventListener('click', function(){ try{ canvas.focus(); }catch(e){} });
+    })();
+  </script>
+</body>
+</html>
