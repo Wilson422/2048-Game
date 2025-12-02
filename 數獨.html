@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>進階版數獨 (完美體驗版)</title>
+<title>進階版數獨</title>
 <style>
   :root {
     --bg-app: #f3f4f6;
@@ -16,7 +16,7 @@
     --grid-line: #d1d5db;
     --grid-bold: #6b7280;
     --cell-bg: #ffffff;
-    --cell-alt: #f8fafc; /* 3x3區塊交錯色 */
+    --cell-alt: #f8fafc;
     --cell-fixed: #111827;
     --cell-input: #1d4ed8;
     --cell-note: #64748b;
@@ -39,18 +39,16 @@
     align-items: center;
   }
 
-  /* --- App 容器 --- */
   .app-container {
     width: 100%;
     max-width: 1000px;
     padding: 20px;
     display: grid;
-    grid-template-columns: 1fr 340px; /* PC: 左棋盤 右控制 */
+    grid-template-columns: 1fr 340px;
     gap: 24px;
     align-items: start;
   }
 
-  /* --- Header --- */
   header {
     grid-column: 1 / -1;
     display: flex;
@@ -80,7 +78,48 @@
     border: 1px solid #dbeafe;
   }
 
-  /* --- 棋盤區域 --- */
+  /* --- 難度選擇器 (RWD scroll) --- */
+  .difficulty-wrapper {
+    max-width: 50%; /* 手機上避免擠壓標題 */
+    overflow-x: auto; /* 允許橫向捲動 */
+  }
+  
+  .difficulty-selector {
+    display: inline-flex;
+    background: var(--bg-app);
+    padding: 4px;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+
+  .diff-btn {
+    border: none;
+    background: transparent;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    color: var(--text-sub);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .diff-btn.active {
+    background: #ffffff;
+    color: var(--primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-weight: 600;
+  }
+  /* 地獄模式特別色 */
+  .diff-btn[data-mode="hell"].active {
+    color: #dc2626; 
+    background: #fef2f2;
+  }
+  /* 自製模式特別色 */
+  .diff-btn[data-mode="custom"].active {
+    color: #7c3aed;
+    background: #f5f3ff;
+  }
+
+  /* --- 棋盤區 --- */
   .board-section {
     display: flex;
     flex-direction: column;
@@ -116,13 +155,11 @@
     position: relative;
   }
 
-  /* --- 格子樣式 (核心修正) --- */
   .cell {
     border: 1px solid var(--grid-line);
     display: flex;
-    align-items: center;     /* 垂直置中 */
-    justify-content: center; /* 水平置中 */
-    font-size: clamp(20px, 4vw, 32px); /* 大字體 */
+    align-items: center; justify-content: center;
+    font-size: clamp(20px, 4vw, 32px);
     cursor: pointer;
     user-select: none;
     position: relative;
@@ -132,44 +169,35 @@
     font-weight: 500;
   }
 
-  /* 題目固定數字 */
-  .cell.fixed {
-    font-weight: 700;
-    color: var(--cell-fixed);
-  }
+  .cell.fixed { font-weight: 700; color: var(--cell-fixed); }
+  
+  /* 自製模式下的輸入狀態 */
+  .cell.setup-input { color: #7c3aed; font-weight: 600; }
 
-  /* 草稿模式專用樣式 (覆蓋預設樣式) */
   .cell.is-note {
-    align-items: flex-start;     /* 靠上 */
-    justify-content: flex-start; /* 靠左 */
+    align-items: flex-start; justify-content: flex-start;
     padding: 2px;
-    flex-wrap: wrap;
-    font-size: 10px !important;  /* 強制小字 */
+    font-size: 10px !important;
     line-height: 1.1;
     color: var(--cell-note);
     letter-spacing: 1px;
     font-weight: normal;
+    flex-wrap: wrap;
   }
 
-  /* 3x3 區塊線條 */
   .cell:nth-child(3n) { border-right: 2px solid var(--grid-bold); }
   .cell:nth-child(9n) { border-right: none; } 
   .cell:nth-child(n+19):nth-child(-n+27),
-  .cell:nth-child(n+46):nth-child(-n+54) {
-    border-bottom: 2px solid var(--grid-bold);
-  }
-
-  /* 區塊交錯底色 */
+  .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid var(--grid-bold); }
   .cell.block-alt { background-color: var(--cell-alt); }
 
-  /* 互動狀態 */
   .cell.selected { background-color: #bfdbfe !important; }
-  .cell.highlight { background-color: #eff6ff; } /* 同行列 */
+  .cell.highlight { background-color: #eff6ff; }
   .cell.same-number { background-color: #dbeafe; font-weight: 700; }
   .cell.conflict { background-color: #fee2e2 !important; color: var(--error); }
   .cell.correct-anim { animation: pop 0.3s ease-out; }
 
-  /* --- 控制面板 (右側) --- */
+  /* --- 控制區 --- */
   .controls-section {
     background: var(--bg-card);
     border-radius: var(--radius);
@@ -180,62 +208,19 @@
     gap: 16px;
   }
 
-  /* 難度選擇 */
-  .difficulty-selector {
-    display: flex;
-    background: var(--bg-app);
-    padding: 4px;
-    border-radius: 8px;
-  }
-
-  .diff-btn {
-    flex: 1;
-    border: none;
-    background: transparent;
-    padding: 8px;
-    font-size: 0.9rem;
-    color: var(--text-sub);
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .diff-btn.active {
-    background: #ffffff;
-    color: var(--primary);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    font-weight: 600;
-  }
-
-  /* 工具列 */
-  .tools-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
+  .tools-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .tool-btn {
     padding: 10px;
     border: 1px solid var(--border);
     background: #fff;
     border-radius: 8px;
     font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
     cursor: pointer;
   }
-  .tool-btn.active {
-    background: var(--primary);
-    color: white;
-    border-color: var(--primary);
-  }
+  .tool-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
 
-  /* 數字鍵盤 */
-  .numpad {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
+  .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .num-btn {
     aspect-ratio: 1.5 / 1;
     border: 1px solid var(--border);
@@ -244,72 +229,34 @@
     font-size: 1.25rem;
     color: var(--primary);
     cursor: pointer;
-    transition: transform 0.05s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
   }
   .num-btn:active { transform: scale(0.96); background: var(--primary-light); }
 
   .action-btn {
-    width: 100%;
-    padding: 12px;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    font-size: 1rem;
-    font-weight: 600;
-    background: var(--primary);
-    color: white;
-    margin-top: auto;
+    width: 100%; padding: 12px; border-radius: 8px; border: none;
+    cursor: pointer; font-size: 1rem; font-weight: 600;
+    background: var(--primary); color: white; margin-top: auto;
   }
+  /* 自製模式下按鈕顏色不同 */
+  .action-btn.custom-mode { background: #7c3aed; }
+  .action-btn.custom-mode:hover { background: #6d28d9; }
 
-  .hint-text {
-    font-size: 0.8rem;
-    color: var(--text-sub);
-    text-align: center;
-    margin-top: 8px;
-    min-height: 1.2em;
-  }
+  .hint-text { font-size: 0.8rem; color: var(--text-sub); text-align: center; margin-top: 8px; min-height: 1.2em; }
 
-  /* --- RWD 手機版 (寬度 < 850px) --- */
   @media (max-width: 850px) {
-    .app-container {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto auto 1fr;
-      padding: 10px;
-      gap: 10px;
-    }
+    .app-container { grid-template-columns: 1fr; padding: 10px; gap: 10px; }
     header { padding: 8px 12px; }
     h1 { font-size: 1.1rem; }
     .badge { display: none; }
-    
-    .status-bar {
-      justify-content: space-around;
-      background: transparent; border: none; box-shadow: none; padding: 0;
-    }
-
-    .controls-section {
-      padding: 0; border: none; background: transparent; gap: 10px;
-    }
-    
-    /* 手機版鍵盤佈局優化 */
-    .numpad {
-      grid-template-columns: repeat(5, 1fr);
-      gap: 6px;
-    }
-    .num-btn {
-      font-size: 1.2rem;
-      aspect-ratio: 1 / 1;
-      border-radius: 50%; /* 圓形按鈕 */
-      border: none;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
+    .difficulty-wrapper { max-width: 100%; margin-top: 4px; }
+    .status-bar { background: transparent; border: none; box-shadow: none; padding: 0; }
+    .controls-section { padding: 0; border: none; background: transparent; gap: 10px; }
+    .numpad { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .num-btn { font-size: 1.2rem; aspect-ratio: 1 / 1; border-radius: 50%; border: none; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
     #btn-num-0 { color: var(--error); }
-    
     .tools-grid { grid-template-columns: repeat(4, 1fr); }
     .tool-btn { flex-direction: column; font-size: 0.75rem; padding: 6px; }
-    
     .shortcuts { display: none; }
   }
 
@@ -319,18 +266,20 @@
 <body>
 
 <div class="app-container">
-  
-  <!-- Header -->
   <header>
-    <h1>數獨 Sudoku <span class="badge">Unique Solution</span></h1>
-    <div class="difficulty-selector">
-      <button class="diff-btn active" onclick="setDifficulty('easy')">簡單</button>
-      <button class="diff-btn" onclick="setDifficulty('medium')">普通</button>
-      <button class="diff-btn" onclick="setDifficulty('hard')">困難</button>
+    <h1>數獨 <span class="badge">Pro</span></h1>
+    <!-- 難度選擇器 -->
+    <div class="difficulty-wrapper">
+      <div class="difficulty-selector">
+        <button class="diff-btn" data-mode="custom" onclick="setDifficulty('custom')">自製</button>
+        <button class="diff-btn active" data-mode="easy" onclick="setDifficulty('easy')">簡單</button>
+        <button class="diff-btn" data-mode="medium" onclick="setDifficulty('medium')">普通</button>
+        <button class="diff-btn" data-mode="hard" onclick="setDifficulty('hard')">困難</button>
+        <button class="diff-btn" data-mode="hell" onclick="setDifficulty('hell')">地獄</button>
+      </div>
     </div>
   </header>
 
-  <!-- 棋盤區 -->
   <div class="board-section">
     <div class="status-bar">
       <div class="status-item">⏳ <span id="timer">00:00</span></div>
@@ -340,28 +289,17 @@
     <div class="hint-text" id="status-msg">請選擇難度並開始遊戲</div>
   </div>
 
-  <!-- 控制區 -->
   <div class="controls-section">
-    <!-- 工具列 -->
     <div class="tools-grid">
-      <button class="tool-btn" id="btn-note" onclick="toggleNoteMode()">
-        ✏️ <span>草稿</span>
-      </button>
-      <button class="tool-btn" onclick="giveHint()">
-        💡 <span>提示</span>
-      </button>
-      <button class="tool-btn" onclick="checkBoard()">
-        ✅ <span>檢查</span>
-      </button>
-      <button class="tool-btn" onclick="resetBoard()">
-        🔁 <span>重置</span>
-      </button>
+      <button class="tool-btn" id="btn-note" onclick="toggleNoteMode()">✏️ <span>草稿</span></button>
+      <button class="tool-btn" onclick="giveHint()">💡 <span>提示</span></button>
+      <button class="tool-btn" onclick="checkBoard()">✅ <span>檢查</span></button>
+      <button class="tool-btn" onclick="resetBoard()">🔁 <span>重置</span></button>
     </div>
 
-    <!-- 數字鍵盤 -->
     <div class="numpad" id="numpad"></div>
 
-    <button class="action-btn" onclick="newGame()">新的一局</button>
+    <button class="action-btn" id="btn-action" onclick="handleActionButton()">新的一局</button>
     
     <div class="shortcuts" style="margin-top: 12px; font-size: 0.8rem; color: #9ca3af; text-align: center;">
       💻 鍵盤：方向鍵移動、數字鍵填入、N 切換草稿
@@ -370,10 +308,10 @@
 </div>
 
 <script>
-// --- 核心變數 ---
-let board = []; // 存放 1-9 或 0
-let notes = []; // 存放草稿字串，例如 "1,3,5"
-let solution = []; 
+/* --- 核心變數 --- */
+let board = [];
+let notes = [];
+let solution = [];
 let initialBoard = [];
 let timerInterval;
 let seconds = 0;
@@ -381,35 +319,32 @@ let mistakes = 0;
 let isNoteMode = false;
 let selectedCellIndex = -1;
 let currentDifficulty = 'easy';
+let isCustomSetup = false; // 是否處於自製題目設定模式
 
 window.onload = () => {
   initUI();
   newGame();
 };
 
+/* --- 初始化 UI --- */
 function initUI() {
   const boardEl = document.getElementById('sudoku-board');
   boardEl.innerHTML = '';
-  
   for (let i = 0; i < 81; i++) {
     const cell = document.createElement('div');
     cell.classList.add('cell');
-    
-    // 3x3 區塊交錯背景
+    // 3x3 背景
     const row = Math.floor(i / 9);
     const col = i % 9;
     const blockRow = Math.floor(row / 3);
     const blockCol = Math.floor(col / 3);
-    if ((blockRow * 3 + blockCol) % 2 !== 0) {
-      cell.classList.add('block-alt');
-    }
+    if ((blockRow * 3 + blockCol) % 2 !== 0) cell.classList.add('block-alt');
 
     cell.dataset.index = i;
     cell.onclick = () => selectCell(i);
     boardEl.appendChild(cell);
   }
 
-  // 數字鍵盤
   const numpad = document.getElementById('numpad');
   numpad.innerHTML = '';
   for (let n = 1; n <= 9; n++) {
@@ -429,106 +364,192 @@ function initUI() {
   document.addEventListener('keydown', handleKeyboard);
 }
 
+/* --- 難度與模式切換 --- */
+function setDifficulty(diff) {
+  // UI 更新
+  document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelector(`.diff-btn[data-mode="${diff}"]`).classList.add('active');
+  
+  if (diff === 'custom') {
+    startCustomSetup();
+  } else {
+    currentDifficulty = diff;
+    isCustomSetup = false;
+    newGame();
+  }
+}
+
+/* --- 主要遊戲流程 (正常模式) --- */
 function newGame() {
-  clearInterval(timerInterval);
-  seconds = 0;
-  mistakes = 0;
+  // 重置狀態
+  stopTimer();
+  seconds = 0; mistakes = 0;
   document.getElementById('timer').textContent = "00:00";
   document.getElementById('mistakes').textContent = "0";
+  
+  // 恢復按鈕樣式
+  const actionBtn = document.getElementById('btn-action');
+  actionBtn.textContent = "新的一局";
+  actionBtn.classList.remove('custom-mode');
+
   updateStatus("正在生成題目...");
 
   setTimeout(() => {
     const fullBoard = generateFullSolution();
     solution = [...fullBoard];
     
-    const holes = currentDifficulty === 'easy' ? 30 : (currentDifficulty === 'medium' ? 40 : 50);
-    initialBoard = removeNumbers(fullBoard, holes);
+    // 設定挖洞數量
+    let holes;
+    if (currentDifficulty === 'easy') holes = 30;
+    else if (currentDifficulty === 'medium') holes = 40;
+    else if (currentDifficulty === 'hard') holes = 50;
+    else if (currentDifficulty === 'hell') holes = 58; // 地獄模式
+    
+    // 地獄模式嘗試次數更多，確保題目更難
+    const attempts = currentDifficulty === 'hell' ? 500 : 200;
+
+    initialBoard = removeNumbers(fullBoard, holes, attempts);
     board = [...initialBoard];
-    notes = Array(81).fill(''); // 重置草稿
+    notes = Array(81).fill('');
 
     renderBoard();
     startTimer();
-    updateStatus("遊戲開始！");
+    updateStatus(currentDifficulty === 'hell' ? "🔥 地獄模式開始，祝你好運！" : "遊戲開始！");
   }, 50);
 }
 
-function setDifficulty(diff) {
-  currentDifficulty = diff;
-  document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
-  event.target.classList.add('active');
-  newGame();
+/* --- 自製題目模式 (Custom Mode) --- */
+function startCustomSetup() {
+  stopTimer();
+  document.getElementById('timer').textContent = "--:--";
+  document.getElementById('mistakes').textContent = "-";
+  
+  isCustomSetup = true;
+  currentDifficulty = 'custom';
+  
+  // 清空所有資料
+  board = Array(81).fill(0);
+  initialBoard = Array(81).fill(0);
+  solution = [];
+  notes = Array(81).fill('');
+  
+  // 更新 UI
+  const actionBtn = document.getElementById('btn-action');
+  actionBtn.textContent = "開始解題"; // 按鈕變更功能
+  actionBtn.classList.add('custom-mode');
+  
+  renderBoard();
+  updateStatus("✏️ 自製模式：請點擊格子填入題目數字");
 }
 
-// --- 渲染邏輯 ---
+function confirmCustomGame() {
+  // 1. 驗證：至少要填 17 個數字 (數獨唯一解的最小條件，雖然不強制但建議)
+  const clues = board.filter(n => n !== 0).length;
+  if (clues < 17) {
+    alert("題目數字太少囉！建議至少填入 17 個數字以確保有解。");
+    return;
+  }
+
+  // 2. 檢查是否有衝突
+  if (!isValidBoardState(board)) {
+    alert("目前的題目有數字衝突（同行、同列或同區有重複），請先修正。");
+    return;
+  }
+
+  // 3. 嘗試解題
+  updateStatus("正在檢查題目...");
+  setTimeout(() => {
+    const solved = solve(deepCopy(board));
+    if (!solved) {
+      alert("哎呀，這個題目似乎無解！請調整數字。");
+      updateStatus("題目無解，請修正");
+    } else {
+      // 成功！鎖定題目
+      solution = solved; // 系統解出的答案
+      initialBoard = [...board]; // 將目前輸入設為固定題
+      isCustomSetup = false;
+      
+      // UI 切換回遊戲狀態
+      const actionBtn = document.getElementById('btn-action');
+      actionBtn.textContent = "新的一局";
+      actionBtn.classList.remove('custom-mode');
+      
+      // 重置計時與錯誤
+      seconds = 0; mistakes = 0;
+      document.getElementById('mistakes').textContent = "0";
+      startTimer();
+      renderBoard(); // 重新渲染，數字會變黑
+      updateStatus("自製題目開始！");
+    }
+  }, 50);
+}
+
+/* --- 按鈕行為分流 --- */
+function handleActionButton() {
+  if (isCustomSetup) {
+    confirmCustomGame();
+  } else {
+    // 如果在自製模式結束後的遊戲中按新局，回到設定還是隨機？
+    // 邏輯：如果在 Custom 難度下按新局，就清空重來，回到設定模式
+    if (currentDifficulty === 'custom') {
+      startCustomSetup();
+    } else {
+      newGame();
+    }
+  }
+}
+
+/* --- 渲染與互動 --- */
 function renderBoard() {
   const cells = document.querySelectorAll('.cell');
   cells.forEach((cell, i) => {
-    // 清除所有狀態 class
-    cell.classList.remove('fixed', 'selected', 'highlight', 'same-number', 'conflict', 'correct-anim', 'is-note');
+    cell.classList.remove('fixed', 'selected', 'highlight', 'same-number', 'conflict', 'correct-anim', 'is-note', 'setup-input');
     cell.textContent = '';
-    cell.style.color = ''; // 重置顏色
+    cell.style.color = '';
 
     const val = board[i];
-    const initialVal = initialBoard[i];
     const noteVal = notes[i];
 
-    if (initialVal !== 0) {
-      // 題目固定數字
-      cell.classList.add('fixed');
-      cell.textContent = initialVal;
-    } else if (val !== 0) {
-      // 玩家填入的數字
-      cell.textContent = val;
-      // 如果填錯了標記紅色
-      if (val !== solution[i]) {
-        cell.classList.add('conflict');
-      } else {
-        cell.style.color = 'var(--cell-input)';
+    if (isCustomSetup) {
+      // 設定模式：所有非0數字都是紫色 (setup-input)
+      if (val !== 0) {
+        cell.textContent = val;
+        cell.classList.add('setup-input');
+        // 檢查即時衝突
+        if (!isSafe(board, Math.floor(i/9), i%9, val, true)) {
+          cell.classList.add('conflict');
+        }
       }
-    } else if (noteVal !== '') {
-      // 草稿狀態
-      cell.classList.add('is-note'); // 加入草稿專用 class (變小字)
-      cell.textContent = noteVal.split(',').join(' ');
+    } else {
+      // 遊戲模式
+      if (initialBoard[i] !== 0) {
+        cell.classList.add('fixed');
+        cell.textContent = initialBoard[i];
+      } else if (val !== 0) {
+        cell.textContent = val;
+        if (solution.length > 0 && val !== solution[i]) {
+          cell.classList.add('conflict');
+        } else {
+          cell.style.color = 'var(--cell-input)';
+        }
+      } else if (noteVal !== '') {
+        cell.classList.add('is-note');
+        cell.textContent = noteVal.split(',').join(' ');
+      }
     }
   });
-  
-  // 保持選中狀態
   if (selectedCellIndex !== -1) selectCell(selectedCellIndex);
-}
-
-function selectCell(index) {
-  selectedCellIndex = index;
-  const cells = document.querySelectorAll('.cell');
-  const selectedVal = board[index]; // 只取正式填入的數字，不取草稿
-
-  cells.forEach((cell, i) => {
-    cell.classList.remove('selected', 'highlight', 'same-number');
-    
-    if (i === index) cell.classList.add('selected');
-
-    const r1 = Math.floor(index / 9);
-    const c1 = index % 9;
-    const r2 = Math.floor(i / 9);
-    const c2 = i % 9;
-
-    if (r1 === r2 || c1 === c2) {
-      cell.classList.add('highlight');
-    }
-
-    // 只有當前格有正式數字時，才高亮其他相同數字
-    if (selectedVal !== 0 && board[i] === selectedVal) {
-      cell.classList.add('same-number');
-    }
-  });
 }
 
 function inputNumber(num) {
   if (selectedCellIndex === -1) return;
-  if (initialBoard[selectedCellIndex] !== 0) return; // 固定格不可改
+  
+  // 遊戲模式下，固定格不能改
+  if (!isCustomSetup && initialBoard[selectedCellIndex] !== 0) return;
 
   const cell = document.querySelectorAll('.cell')[selectedCellIndex];
 
-  // 清除功能
+  // 清除
   if (num === 0) {
     board[selectedCellIndex] = 0;
     notes[selectedCellIndex] = '';
@@ -536,55 +557,69 @@ function inputNumber(num) {
     return;
   }
 
-  // 草稿模式
-  if (isNoteMode) {
-    // 如果已經填了正式數字，先清掉
-    if (board[selectedCellIndex] !== 0) {
-      board[selectedCellIndex] = 0;
-    }
-    
+  // 草稿模式 (僅在非設定模式下有效)
+  if (isNoteMode && !isCustomSetup) {
+    if (board[selectedCellIndex] !== 0) board[selectedCellIndex] = 0;
     let currentNotes = notes[selectedCellIndex] ? notes[selectedCellIndex].split(',') : [];
     const sNum = num.toString();
-    
-    if (currentNotes.includes(sNum)) {
-      currentNotes = currentNotes.filter(n => n !== sNum); // 取消
-    } else {
-      currentNotes.push(sNum); // 加入
-    }
+    if (currentNotes.includes(sNum)) currentNotes = currentNotes.filter(n => n !== sNum);
+    else currentNotes.push(sNum);
     currentNotes.sort();
     notes[selectedCellIndex] = currentNotes.join(',');
-    
     renderBoard();
     return;
   }
 
-  // 一般填寫模式
-  // 清除該格的草稿
-  notes[selectedCellIndex] = '';
+  // 一般填寫 / 設定模式填寫
+  notes[selectedCellIndex] = ''; // 清草稿
   
-  if (num !== solution[selectedCellIndex]) {
-    mistakes++;
-    document.getElementById('mistakes').textContent = mistakes;
-    board[selectedCellIndex] = num; // 即使錯了也先填入，讓 renderBoard 標紅
-    renderBoard();
-    updateStatus("數字不對喔！");
-    if (mistakes >= 3) updateStatus("錯誤達 3 次，建議使用提示！");
-  } else {
-    // 正確
+  if (isCustomSetup) {
+    // 設定模式：直接填入，不檢查對錯（因為還沒開始），只檢查基本規則衝突
     board[selectedCellIndex] = num;
     renderBoard();
-    const targetCell = document.querySelectorAll('.cell')[selectedCellIndex];
-    targetCell.classList.add('correct-anim');
-    
-    if (!board.includes(0)) {
-      clearInterval(timerInterval);
-      updateStatus("🎉 恭喜通關！");
-      setTimeout(() => alert("恭喜！用時：" + document.getElementById('timer').textContent), 100);
+  } else {
+    // 遊戲模式：檢查對錯
+    if (num !== solution[selectedCellIndex]) {
+      mistakes++;
+      document.getElementById('mistakes').textContent = mistakes;
+      board[selectedCellIndex] = num; 
+      renderBoard();
+      updateStatus("數字不對喔！");
+      if (mistakes >= 3) updateStatus("錯誤達 3 次，建議使用提示！");
+    } else {
+      board[selectedCellIndex] = num;
+      renderBoard();
+      document.querySelectorAll('.cell')[selectedCellIndex].classList.add('correct-anim');
+      if (!board.includes(0)) {
+        stopTimer();
+        updateStatus("🎉 恭喜通關！");
+        setTimeout(() => alert("恭喜！用時：" + document.getElementById('timer').textContent), 100);
+      }
     }
   }
 }
 
+/* --- 輔助邏輯 --- */
+function selectCell(index) {
+  selectedCellIndex = index;
+  const cells = document.querySelectorAll('.cell');
+  const selectedVal = board[index];
+
+  cells.forEach((cell, i) => {
+    cell.classList.remove('selected', 'highlight', 'same-number');
+    if (i === index) cell.classList.add('selected');
+    const r1 = Math.floor(index/9), c1 = index%9;
+    const r2 = Math.floor(i/9), c2 = i%9;
+    if (r1 === r2 || c1 === c2) cell.classList.add('highlight');
+    if (selectedVal !== 0 && board[i] === selectedVal) cell.classList.add('same-number');
+  });
+}
+
 function toggleNoteMode() {
+  if (isCustomSetup) {
+    updateStatus("設定模式下無法使用草稿");
+    return;
+  }
   isNoteMode = !isNoteMode;
   const btn = document.getElementById('btn-note');
   if (isNoteMode) {
@@ -597,63 +632,58 @@ function toggleNoteMode() {
 }
 
 function giveHint() {
-  // 找一個還沒填對的格子
+  if (isCustomSetup) return;
   const available = [];
-  board.forEach((val, i) => {
-    if (val === 0 || val !== solution[i]) {
-      available.push(i);
-    }
-  });
-  
+  board.forEach((val, i) => { if (val === 0 || val !== solution[i]) available.push(i); });
   if (available.length === 0) return;
-
-  // 如果有選中空格，就填選中的，否則隨機
-  let targetIdx = selectedCellIndex;
-  if (targetIdx === -1 || board[targetIdx] === solution[targetIdx]) {
-    targetIdx = available[Math.floor(Math.random() * available.length)];
-  }
-
-  board[targetIdx] = solution[targetIdx];
-  notes[targetIdx] = ''; // 清除草稿
   
+  let idx = selectedCellIndex;
+  if (idx === -1 || board[idx] === solution[idx]) idx = available[Math.floor(Math.random() * available.length)];
+  
+  board[idx] = solution[idx];
+  notes[idx] = '';
   renderBoard();
-  selectCell(targetIdx);
-  updateStatus("已填入提示");
+  selectCell(idx);
 }
 
 function checkBoard() {
-  let errCount = 0;
-  board.forEach((v, i) => {
-    if (v !== 0 && v !== solution[i]) {
-      errCount++;
-    }
-  });
-  renderBoard(); // 重新渲染會自動把錯的標紅
-  updateStatus(errCount > 0 ? `發現 ${errCount} 個錯誤` : "目前全對！");
+  if (isCustomSetup) {
+    // 設定模式下的檢查：只檢查衝突
+    if (!isValidBoardState(board)) updateStatus("發現數字衝突！");
+    else updateStatus("目前數字排列合法");
+    return;
+  }
+  let err = 0;
+  board.forEach((v, i) => { if (v !== 0 && v !== solution[i]) err++; });
+  renderBoard();
+  updateStatus(err > 0 ? `發現 ${err} 個錯誤` : "目前全對！");
 }
 
 function resetBoard() {
-  if(!confirm("重置本局？")) return;
-  board = [...initialBoard];
-  notes = Array(81).fill('');
-  mistakes = 0;
-  document.getElementById('mistakes').textContent = 0;
-  renderBoard();
+  if (!confirm("重置本局？")) return;
+  if (isCustomSetup) {
+    startCustomSetup(); // 重置為全空
+  } else {
+    board = [...initialBoard];
+    notes = Array(81).fill('');
+    mistakes = 0;
+    document.getElementById('mistakes').textContent = 0;
+    renderBoard();
+  }
 }
 
-// --- 數獨生成演算法 ---
+/* --- 演算法核心 --- */
 function generateFullSolution() {
   const b = Array(81).fill(0);
   fillBoard(b);
   return b;
 }
-
 function fillBoard(b) {
   const empty = b.indexOf(0);
   if (empty === -1) return true;
   const nums = shuffle([1,2,3,4,5,6,7,8,9]);
   for (let n of nums) {
-    if (isValid(b, empty, n)) {
+    if (isSafe(b, Math.floor(empty/9), empty%9, n)) {
       b[empty] = n;
       if (fillBoard(b)) return true;
       b[empty] = 0;
@@ -661,23 +691,62 @@ function fillBoard(b) {
   }
   return false;
 }
+function isSafe(b, r, c, n, ignoreSelf = false) {
+  const idx = r*9+c;
+  for (let i=0; i<9; i++) {
+    // Check Row
+    if (b[r*9+i] === n && (r*9+i) !== idx) return false;
+    // Check Col
+    if (b[i*9+c] === n && (i*9+c) !== idx) return false;
+    // Check Block
+    const br = Math.floor(r/3)*3, bc = Math.floor(c/3)*3;
+    const bi = (br+Math.floor(i/3))*9 + (bc+i%3);
+    if (b[bi] === n && bi !== idx) return false;
+  }
+  return true;
+}
 
-function removeNumbers(solvedBoard, attempts) {
+// 檢查整個盤面是否有衝突
+function isValidBoardState(b) {
+  for (let i = 0; i < 81; i++) {
+    if (b[i] !== 0) {
+      if (!isSafe(b, Math.floor(i/9), i%9, b[i], true)) return false;
+    }
+  }
+  return true;
+}
+
+function removeNumbers(solvedBoard, count, attempts = 200) {
   let b = [...solvedBoard];
-  let count = attempts;
-  while (count > 0) {
+  let c = count;
+  while (c > 0 && attempts > 0) {
     let idx = Math.floor(Math.random() * 81);
+    attempts--;
     if (b[idx] !== 0) {
       let backup = b[idx];
       b[idx] = 0;
-      // 簡單驗證唯一解 (計算解數量，超過1個就還原)
       let solutions = 0;
-      solveCount(b, (c) => solutions = c);
+      solveCount(b, (cnt) => solutions = cnt);
       if (solutions !== 1) b[idx] = backup;
-      else count--;
+      else c--;
     }
   }
   return b;
+}
+
+function solve(b) {
+  // 單純解題用
+  const empty = b.indexOf(0);
+  if (empty === -1) return b;
+  for (let n=1; n<=9; n++) {
+    if (isSafe(b, Math.floor(empty/9), empty%9, n)) {
+      b[empty] = n;
+      let res = solve(b);
+      if (res) return res;
+      b[empty] = 0;
+    }
+  }
+  return null;
 }
 
 function solveCount(b, cb, ref={c:0}) {
@@ -685,7 +754,7 @@ function solveCount(b, cb, ref={c:0}) {
   if (empty === -1) { ref.c++; return; }
   for (let n=1; n<=9; n++) {
     if (ref.c > 1) return; 
-    if (isValid(b, empty, n)) {
+    if (isSafe(b, Math.floor(empty/9), empty%9, n)) {
       b[empty] = n;
       solveCount(b, cb, ref);
       b[empty] = 0;
@@ -694,24 +763,11 @@ function solveCount(b, cb, ref={c:0}) {
   cb(ref.c);
 }
 
-function isValid(b, idx, n) {
-  const r = Math.floor(idx/9);
-  const c = idx%9;
-  const br = Math.floor(r/3)*3;
-  const bc = Math.floor(c/3)*3;
-  for (let i=0; i<9; i++) {
-    if (b[r*9+i]===n) return false;
-    if (b[i*9+c]===n) return false;
-    const bi = (br+Math.floor(i/3))*9 + (bc+i%3);
-    if (b[bi]===n) return false;
-  }
-  return true;
-}
-
+function deepCopy(arr) { return JSON.parse(JSON.stringify(arr)); }
 function shuffle(arr) { return arr.sort(()=>Math.random()-0.5); }
 
-// --- 輔助 ---
 function startTimer() {
+  stopTimer();
   timerInterval = setInterval(() => {
     seconds++;
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -719,14 +775,12 @@ function startTimer() {
     document.getElementById('timer').textContent = `${m}:${s}`;
   }, 1000);
 }
+function stopTimer() { clearInterval(timerInterval); }
 
 function updateStatus(msg) {
   const el = document.getElementById('status-msg');
   el.textContent = msg;
-  el.style.opacity = 1;
-  setTimeout(() => { el.style.opacity = 0.7; }, 3000);
 }
-
 function handleKeyboard(e) {
   if (selectedCellIndex === -1) return;
   const k = e.key;
