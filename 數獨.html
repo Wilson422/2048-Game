@@ -238,10 +238,10 @@
 
 <script>
 /* --- 核心變數 --- */
-let board = [];
-let notes = [];
+let board = Array(81).fill(0);
+let initialBoard = Array(81).fill(0);
+let notes = Array(81).fill('');
 let solution = [];
-let initialBoard = [];
 let timerInterval = null;
 let seconds = 0;
 let mistakes = 0;
@@ -250,7 +250,6 @@ let selectedCellIndex = -1;
 let currentDifficulty = 'easy';
 let isCustomSetup = false;
 let isPaused = false;
-let isGameStarted = false; // 是否正式開始計時 (First input flag)
 
 window.onload = () => {
   initUI();
@@ -264,9 +263,11 @@ function initUI() {
   for (let i = 0; i < 81; i++) {
     const cell = document.createElement('div');
     cell.classList.add('cell');
+    // 3x3 區塊背景交錯
     const r = Math.floor(i/9), c = i%9;
     const br = Math.floor(r/3), bc = Math.floor(c/3);
     if ((br*3 + bc)%2 !== 0) cell.classList.add('block-alt');
+    
     cell.dataset.index = i;
     cell.onclick = () => selectCell(i);
     boardEl.appendChild(cell);
@@ -289,9 +290,8 @@ function initUI() {
   numpad.appendChild(clearBtn);
 
   document.addEventListener('keydown', handleKeyboard);
-  // 頁面切換監聽 (切分頁時自動暫停)
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && isGameStarted && !isPaused && !isCustomSetup) {
+    if (document.hidden && !isPaused && !isCustomSetup) {
       togglePause();
     }
   });
@@ -304,60 +304,56 @@ function setDifficulty(diff) {
   if (diff === 'custom') startCustomSetup();
   else {
     currentDifficulty = diff;
-    isCustomSetup = false;
     newGame();
   }
 }
 
 /* --- 遊戲邏輯 --- */
 function newGame() {
-  resetTimerState();
+  // 重置狀態
+  stopTimer();
+  seconds = 0; 
+  mistakes = 0;
+  document.getElementById('timer').textContent = "00:00";
+  document.getElementById('mistakes').textContent = "0";
   
-  // 重置變數
-  isPaused = false;
-  isGameStarted = false; // 尚未開始計時
   isCustomSetup = false;
+  isPaused = false;
+  
   document.getElementById('pause-overlay').classList.remove('active');
   document.getElementById('controls-area').classList.remove('disabled');
   document.getElementById('btn-pause').style.display = 'flex';
   document.getElementById('btn-action').textContent = "新的一局";
   document.getElementById('btn-action').classList.remove('custom-mode');
-
-  updateStatus("正在生成題目...");
   
+  updateStatus("正在生成題目...");
+
+  // 使用極短延遲確保 UI 刷新，但邏輯同步執行
   setTimeout(() => {
+    // 1. 生成完整解
     const fullBoard = generateFullSolution();
     solution = [...fullBoard];
     
-    let holes;
-    if (currentDifficulty === 'easy') holes = 30;
-    else if (currentDifficulty === 'medium') holes = 40;
+    // 2. 挖洞 (根據難度)
+    let holes = 30; // easy
+    if (currentDifficulty === 'medium') holes = 40;
     else if (currentDifficulty === 'hard') holes = 50;
     else if (currentDifficulty === 'hell') holes = 58;
     
-    const attempts = currentDifficulty === 'hell' ? 500 : 200;
-    initialBoard = removeNumbers(fullBoard, holes, attempts);
+    // 3. 執行挖洞 (會確保唯一解)
+    initialBoard = removeNumbers(fullBoard, holes);
     board = [...initialBoard];
     notes = Array(81).fill('');
 
     renderBoard();
-    // 這裡不 startTimer()，改顯示等待中
-    updateStatus(currentDifficulty === 'hell' ? "🔥 地獄模式 (填入數字開始計時)" : "⏳ 等待輸入開始計時...");
-  }, 50);
+    startTimer(); // ** 直接開始計時 **
+    updateStatus(currentDifficulty === 'hell' ? "🔥 地獄模式開始！" : "遊戲開始！");
+  }, 10);
 }
 
-/* --- 計時器與暫停控制 --- */
-function resetTimerState() {
-  stopTimer();
-  seconds = 0;
-  mistakes = 0;
-  document.getElementById('timer').textContent = "00:00";
-  document.getElementById('mistakes').textContent = "0";
-}
-
+/* --- 計時器與暫停 --- */
 function startTimer() {
-  if (timerInterval) return; // 避免重複啟動
-  isGameStarted = true; // 標記為已開始
+  if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(() => {
     seconds++;
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -374,8 +370,8 @@ function stopTimer() {
 }
 
 function togglePause() {
-  if (!isGameStarted || isCustomSetup) return; // 沒開始或設定模式不能暫停
-
+  if (isCustomSetup) return;
+  
   isPaused = !isPaused;
   const overlay = document.getElementById('pause-overlay');
   const controls = document.getElementById('controls-area');
@@ -398,10 +394,14 @@ function togglePause() {
 
 /* --- 自製模式 --- */
 function startCustomSetup() {
-  resetTimerState();
+  stopTimer();
+  seconds = 0;
+  mistakes = 0;
+  document.getElementById('timer').textContent = "00:00";
+  document.getElementById('mistakes').textContent = "0";
+
   isCustomSetup = true;
   currentDifficulty = 'custom';
-  isGameStarted = false;
   isPaused = false;
   
   board = Array(81).fill(0);
@@ -409,7 +409,7 @@ function startCustomSetup() {
   solution = [];
   notes = Array(81).fill('');
   
-  document.getElementById('btn-pause').style.display = 'none'; // 設定模式不顯示暫停
+  document.getElementById('btn-pause').style.display = 'none';
   document.getElementById('pause-overlay').classList.remove('active');
   document.getElementById('controls-area').classList.remove('disabled');
   
@@ -430,7 +430,7 @@ function confirmCustomGame() {
   setTimeout(() => {
     const solved = solve(deepCopy(board));
     if (!solved) {
-      alert("此題無解！請調整。");
+      alert("此題無解！");
       updateStatus("題目無解");
     } else {
       solution = solved;
@@ -442,8 +442,7 @@ function confirmCustomGame() {
       actionBtn.classList.remove('custom-mode');
       document.getElementById('btn-pause').style.display = 'flex';
       
-      resetTimerState();
-      startTimer(); // 自製題目確認後，直接開始計時
+      startTimer(); // 自製確認後直接開始計時
       renderBoard();
       updateStatus("自製題目開始！");
     }
@@ -456,26 +455,32 @@ function handleActionButton() {
   else newGame();
 }
 
-/* --- 輸入與渲染 --- */
+/* --- 渲染與互動 --- */
 function renderBoard() {
   const cells = document.querySelectorAll('.cell');
   cells.forEach((cell, i) => {
     cell.classList.remove('fixed', 'selected', 'highlight', 'same-number', 'conflict', 'correct-anim', 'is-note', 'setup-input');
-    cell.textContent = ''; cell.style.color = '';
+    cell.textContent = '';
+    cell.style.color = '';
+
     const val = board[i];
     if (isCustomSetup) {
       if (val !== 0) {
-        cell.textContent = val; cell.classList.add('setup-input');
+        cell.textContent = val;
+        cell.classList.add('setup-input');
         if (!isSafe(board, Math.floor(i/9), i%9, val, true)) cell.classList.add('conflict');
       }
     } else {
-      if (initialBoard[i] !== 0) { cell.classList.add('fixed'); cell.textContent = initialBoard[i]; }
-      else if (val !== 0) {
+      if (initialBoard[i] !== 0) {
+        cell.classList.add('fixed');
+        cell.textContent = initialBoard[i];
+      } else if (val !== 0) {
         cell.textContent = val;
         if (solution.length > 0 && val !== solution[i]) cell.classList.add('conflict');
         else cell.style.color = 'var(--cell-input)';
       } else if (notes[i]) {
-        cell.classList.add('is-note'); cell.textContent = notes[i].split(',').join(' ');
+        cell.classList.add('is-note');
+        cell.textContent = notes[i].split(',').join(' ');
       }
     }
   });
@@ -486,16 +491,9 @@ function inputNumber(num) {
   if (isPaused || selectedCellIndex === -1) return;
   if (!isCustomSetup && initialBoard[selectedCellIndex] !== 0) return;
 
-  // **延遲計時邏輯**
-  if (!isCustomSetup && !isGameStarted && num !== 0) {
-    startTimer(); // 第一次有效輸入時，啟動計時
-    updateStatus("計時開始！");
-  }
-
-  const cell = document.querySelectorAll('.cell')[selectedCellIndex];
-  
   if (num === 0) {
-    board[selectedCellIndex] = 0; notes[selectedCellIndex] = '';
+    board[selectedCellIndex] = 0;
+    notes[selectedCellIndex] = '';
     renderBoard(); return;
   }
 
@@ -503,25 +501,31 @@ function inputNumber(num) {
     if (board[selectedCellIndex] !== 0) board[selectedCellIndex] = 0;
     let cur = notes[selectedCellIndex] ? notes[selectedCellIndex].split(',') : [];
     const s = num.toString();
-    if (cur.includes(s)) cur = cur.filter(n=>n!==s); else cur.push(s);
-    cur.sort(); notes[selectedCellIndex] = cur.join(',');
+    if (cur.includes(s)) cur = cur.filter(n => n !== s); else cur.push(s);
+    cur.sort();
+    notes[selectedCellIndex] = cur.join(',');
     renderBoard(); return;
   }
 
   notes[selectedCellIndex] = '';
   if (isCustomSetup) {
-    board[selectedCellIndex] = num; renderBoard();
+    board[selectedCellIndex] = num;
+    renderBoard();
   } else {
     if (num !== solution[selectedCellIndex]) {
-      mistakes++; document.getElementById('mistakes').textContent = mistakes;
-      board[selectedCellIndex] = num; renderBoard();
+      mistakes++;
+      document.getElementById('mistakes').textContent = mistakes;
+      board[selectedCellIndex] = num;
+      renderBoard();
       updateStatus("數字錯誤");
       if (mistakes >= 3) updateStatus("錯誤達 3 次，建議使用提示");
     } else {
-      board[selectedCellIndex] = num; renderBoard();
+      board[selectedCellIndex] = num;
+      renderBoard();
       document.querySelectorAll('.cell')[selectedCellIndex].classList.add('correct-anim');
       if (!board.includes(0)) {
-        stopTimer(); updateStatus("🎉 恭喜通關！");
+        stopTimer();
+        updateStatus("🎉 恭喜通關！");
         setTimeout(() => alert("恭喜！用時：" + document.getElementById('timer').textContent), 100);
       }
     }
@@ -535,8 +539,9 @@ function selectCell(index) {
   const sv = board[index];
   cells.forEach((c, i) => {
     c.classList.remove('selected', 'highlight', 'same-number');
-    if (i===index) c.classList.add('selected');
-    const r1=Math.floor(index/9), c1=index%9, r2=Math.floor(i/9), c2=i%9;
+    if (i === index) c.classList.add('selected');
+    const r1 = Math.floor(index/9), c1 = index%9;
+    const r2 = Math.floor(i/9), c2 = i%9;
     if (r1===r2 || c1===c2) c.classList.add('highlight');
     if (sv!==0 && board[i]===sv) c.classList.add('same-number');
   });
@@ -553,23 +558,26 @@ function toggleNoteMode() {
 function giveHint() {
   if (isCustomSetup || isPaused) return;
   
-  // **延遲計時邏輯**：如果使用提示，也視為開始遊戲
-  if (!isGameStarted) { startTimer(); updateStatus("計時開始！"); }
-
   const av = [];
-  board.forEach((v,i)=>{ if(v===0 || v!==solution[i]) av.push(i); });
-  if (av.length===0) return;
+  board.forEach((v, i) => { if (v === 0 || v !== solution[i]) av.push(i); });
+  if (av.length === 0) return;
+  
   let idx = selectedCellIndex;
-  if (idx===-1 || board[idx]===solution[idx]) idx = av[Math.floor(Math.random()*av.length)];
-  board[idx] = solution[idx]; notes[idx] = '';
-  renderBoard(); selectCell(idx);
+  if (idx === -1 || board[idx] === solution[idx]) idx = av[Math.floor(Math.random()*av.length)];
+  
+  board[idx] = solution[idx];
+  notes[idx] = '';
+  renderBoard();
+  selectCell(idx);
 }
 
 function checkBoard() {
   if (isPaused) return;
-  if (isCustomSetup) { updateStatus(isValidBoardState(board)?"排列合法":"有衝突！"); return; }
-  let err=0; board.forEach((v,i)=>{if(v!==0 && v!==solution[i])err++});
-  renderBoard(); updateStatus(err>0?`發現 ${err} 個錯誤`:"目前全對");
+  if (isCustomSetup) { updateStatus(isValidBoardState(board) ? "排列合法" : "有衝突！"); return; }
+  let err = 0;
+  board.forEach((v, i) => { if (v !== 0 && v !== solution[i]) err++; });
+  renderBoard();
+  updateStatus(err > 0 ? `發現 ${err} 個錯誤` : "目前全對");
 }
 
 function resetBoard() {
@@ -577,78 +585,137 @@ function resetBoard() {
   if (!confirm("重置本局？")) return;
   if (isCustomSetup) startCustomSetup();
   else {
-    // 重置遊戲不等於重開新局，所以恢復到「剛生成好」的狀態
-    // 邏輯：重置也應該停止計時，回到等待輸入狀態
     stopTimer();
     seconds = 0; document.getElementById('timer').textContent = "00:00";
     mistakes = 0; document.getElementById('mistakes').textContent = "0";
-    isGameStarted = false; // 回到未開始狀態
-    
     board = [...initialBoard];
     notes = Array(81).fill('');
     renderBoard();
-    updateStatus("已重置，等待輸入...");
+    startTimer();
+    updateStatus("已重置遊戲");
   }
 }
 
-/* --- 演算法 --- */
-function generateFullSolution() { const b=Array(81).fill(0); fillBoard(b); return b; }
+function updateStatus(msg) {
+  document.getElementById('status-msg').textContent = msg;
+}
+
+/* --- 演算法 (Backtracking) --- */
+function generateFullSolution() {
+  const b = Array(81).fill(0);
+  fillBoard(b);
+  return b;
+}
+
 function fillBoard(b) {
-  const e=b.indexOf(0); if(e===-1)return true;
-  const nums=shuffle([1,2,3,4,5,6,7,8,9]);
-  for(let n of nums){ if(isSafe(b,Math.floor(e/9),e%9,n)){ b[e]=n; if(fillBoard(b))return true; b[e]=0; } }
+  const e = b.indexOf(0);
+  if (e === -1) return true;
+  const nums = shuffle([1,2,3,4,5,6,7,8,9]);
+  for (let n of nums) {
+    if (isSafe(b, Math.floor(e/9), e%9, n)) {
+      b[e] = n;
+      if (fillBoard(b)) return true;
+      b[e] = 0;
+    }
+  }
   return false;
 }
-function isSafe(b,r,c,n,ign=false){
-  const idx=r*9+c;
-  for(let i=0;i<9;i++){
-    if(b[r*9+i]===n && (r*9+i)!==idx)return false;
-    if(b[i*9+c]===n && (i*9+c)!==idx)return false;
-    const bi=(Math.floor(r/3)*3+Math.floor(i/3))*9+(Math.floor(c/3)*3+i%3);
-    if(b[bi]===n && bi!==idx)return false;
+
+function isSafe(b, r, c, n, ignoreSelf=false) {
+  const idx = r*9 + c;
+  for (let i = 0; i < 9; i++) {
+    if (b[r*9 + i] === n && (r*9 + i) !== idx) return false;
+    if (b[i*9 + c] === n && (i*9 + c) !== idx) return false;
+    const bi = (Math.floor(r/3)*3 + Math.floor(i/3))*9 + (Math.floor(c/3)*3 + i%3);
+    if (b[bi] === n && bi !== idx) return false;
   }
   return true;
 }
-function isValidBoardState(b){
-  for(let i=0;i<81;i++) if(b[i]!==0 && !isSafe(b,Math.floor(i/9),i%9,b[i],true)) return false;
+
+function isValidBoardState(b) {
+  for (let i = 0; i < 81; i++) {
+    if (b[i] !== 0 && !isSafe(b, Math.floor(i/9), i%9, b[i], true)) return false;
+  }
   return true;
 }
-function removeNumbers(sb,cnt,atm){
-  let b=[...sb], c=cnt;
-  while(c>0 && atm>0){
-    let i=Math.floor(Math.random()*81); atm--;
-    if(b[i]!==0){
-      let bk=b[i]; b[i]=0; let s=0; solveCount(b,k=>s=k);
-      if(s!==1)b[i]=bk; else c--;
+
+function removeNumbers(solvedBoard, holes) {
+  let b = [...solvedBoard];
+  let attempts = holes * 6; // 限制嘗試次數，防止卡死
+  let removedCount = 0;
+  
+  while (removedCount < holes && attempts > 0) {
+    let idx = Math.floor(Math.random() * 81);
+    attempts--;
+    
+    if (b[idx] !== 0) {
+      let backup = b[idx];
+      b[idx] = 0;
+      
+      // 唯一解檢查
+      if (countSolutions(b) !== 1) {
+        b[idx] = backup;
+      } else {
+        removedCount++;
+      }
     }
   }
   return b;
 }
-function solve(b){
-  const e=b.indexOf(0); if(e===-1)return b;
-  for(let n=1;n<=9;n++){ if(isSafe(b,Math.floor(e/9),e%9,n)){ b[e]=n; let r=solve(b); if(r)return r; b[e]=0; } }
+
+function countSolutions(b) {
+  let count = 0;
+  function backtrack(board) {
+    let idx = board.indexOf(0);
+    if (idx === -1) { count++; return; }
+    let r = Math.floor(idx/9);
+    let c = idx%9;
+    
+    for (let n = 1; n <= 9; n++) {
+      if (count > 1) return; 
+      if (isSafe(board, r, c, n)) {
+        board[idx] = n;
+        backtrack(board);
+        board[idx] = 0;
+      }
+    }
+  }
+  backtrack([...b]);
+  return count;
+}
+
+function solve(b) {
+  const e = b.indexOf(0);
+  if (e === -1) return b;
+  for (let n = 1; n <= 9; n++) {
+    if (isSafe(b, Math.floor(e/9), e%9, n)) {
+      b[e] = n;
+      const r = solve(b);
+      if (r) return r;
+      b[e] = 0;
+    }
+  }
   return null;
 }
-function solveCount(b,cb,ref={c:0}){
-  const e=b.indexOf(0); if(e===-1){ ref.c++; return; }
-  for(let n=1;n<=9;n++){ if(ref.c>1)return; if(isSafe(b,Math.floor(e/9),e%9,n)){ b[e]=n; solveCount(b,cb,ref); b[e]=0; } }
-  cb(ref.c);
-}
-function deepCopy(a){ return JSON.parse(JSON.stringify(a)); }
-function shuffle(a){ return a.sort(()=>Math.random()-0.5); }
+
+function deepCopy(a) { return JSON.parse(JSON.stringify(a)); }
+function shuffle(a) { return a.sort(() => Math.random() - 0.5); }
 
 function handleKeyboard(e) {
   if (isPaused || selectedCellIndex === -1) return;
   const k = e.key;
-  if (k>='1' && k<='9') inputNumber(parseInt(k));
-  if (k==='0' || k==='Backspace' || k==='Delete') inputNumber(0);
-  if (k.toLowerCase()==='n') toggleNoteMode();
+  if (k >= '1' && k <= '9') inputNumber(parseInt(k));
+  if (k === '0' || k === 'Backspace' || k === 'Delete') inputNumber(0);
+  if (k.toLowerCase() === 'n') toggleNoteMode();
+  
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k)) {
     e.preventDefault();
-    let r=Math.floor(selectedCellIndex/9), c=selectedCellIndex%9;
-    if(k==='ArrowUp')r=(r-1+9)%9; if(k==='ArrowDown')r=(r+1)%9;
-    if(k==='ArrowLeft')c=(c-1+9)%9; if(k==='ArrowRight')c=(c+1)%9;
-    selectCell(r*9+c);
+    let r = Math.floor(selectedCellIndex/9), c = selectedCellIndex%9;
+    if (k === 'ArrowUp') r = (r-1+9)%9;
+    if (k === 'ArrowDown') r = (r+1)%9;
+    if (k === 'ArrowLeft') c = (c-1+9)%9;
+    if (k === 'ArrowRight') c = (c+1)%9;
+    selectCell(r*9 + c);
   }
 }
 </script>
