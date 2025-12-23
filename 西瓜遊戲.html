@@ -2,379 +2,605 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>西瓜遊戲 - 連鎖合成（SAT 立即檢查版）</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>西瓜遊戲 - 極致優化版 🍉</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <style>
-    body { margin:0; background:#f9f9f9; font-family: Arial, "Noto Sans TC", sans-serif; text-align:center; }
-    canvas { background:#fff8e1; border:2px solid #999; display:block; margin:16px auto; border-radius:8px; touch-action:none; }
-    #score { font-size:20px; margin-top:8px; }
-    #controls { margin-top:8px; }
-    button { padding:8px 14px; font-size:14px; margin:6px; }
-    #gameOver { display:none; color:#c0392b; font-size:26px; margin-top:12px; }
-    p.hint { color:#666; font-size:13px; }
+    @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+
+    body {
+      margin: 0;
+      background: #ffeaa7;
+      font-family: 'Fredoka One', cursive, sans-serif;
+      overflow: hidden; /* 防止捲動 */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: #5d4037;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100%;
+      max-width: 450px;
+      height: 100vh;
+      max-height: 800px;
+      background: #fff8e1;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    /* UI Layer */
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none; /* 讓點擊穿透到 Canvas */
+      z-index: 10;
+    }
+
+    .header {
+      position: absolute;
+      top: 15px;
+      left: 20px;
+    }
+
+    .score-label {
+      font-size: 16px;
+      color: #fab1a0;
+    }
+
+    .score-number {
+      font-size: 32px;
+      color: #e17055;
+    }
+
+    .next-fruit-box {
+      position: absolute;
+      top: 15px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.8);
+      border: 2px solid #fab1a0;
+      border-radius: 10px;
+      width: 70px;
+      height: 70px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .next-label {
+      font-size: 10px;
+      color: #e17055;
+      margin-bottom: 2px;
+    }
+
+    .next-icon {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    /* Canvas */
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    /* Game Over Screen */
+    #game-over {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 20;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      backdrop-filter: blur(4px);
+    }
+
+    #game-over h2 {
+      color: #fff;
+      font-size: 48px;
+      margin: 0 0 20px 0;
+      text-shadow: 2px 2px 0 #e17055;
+    }
+
+    button {
+      background: #e17055;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 24px;
+      font-family: 'Fredoka One', cursive;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #c0392b;
+      transition: transform 0.1s;
+    }
+
+    button:active {
+      transform: translateY(4px);
+      box-shadow: none;
+    }
+    
+    /* Loading Guide Line */
+    .guide-line {
+      position: absolute;
+      top: 100px;
+      bottom: 0;
+      width: 2px;
+      border-left: 2px dashed rgba(0,0,0,0.2);
+      transform: translateX(-50%);
+      display: none; 
+      z-index: 5;
+    }
+
   </style>
 </head>
 <body>
-  <h1>西瓜遊戲 - 連鎖合成（SAT 立即檢查版）🍉</h1>
-  <div id="score">分數：0</div>
-  <div id="controls">
-    <button id="startBtn">開始遊戲</button>
-    <button id="restartBtn">重新開始</button>
+
+  <div id="game-container">
+    <!-- UI Layer -->
+    <div class="ui-layer">
+      <div class="header">
+        <div class="score-label">SCORE</div>
+        <div class="score-number" id="score">0</div>
+      </div>
+      <div class="next-fruit-box">
+        <div class="next-label">NEXT</div>
+        <div class="next-icon" id="next-fruit-icon">🍒</div>
+      </div>
+      <div class="guide-line" id="guide-line"></div>
+    </div>
+
+    <!-- Game Over -->
+    <div id="game-over">
+      <h2>GAME OVER</h2>
+      <button id="restart-btn">Try Again</button>
+    </div>
+
+    <canvas id="world"></canvas>
   </div>
-  <div id="gameOver">🎮 遊戲結束！</div>
-  <p class="hint">操作：空白 = 產生水果；← → = 左右移動（放下前）；↓ = 放下 / 加速。請開啟 F12 的 Console 觀察合成 log。</p>
-  <canvas id="game" width="400" height="600" tabindex="0"></canvas>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <script>
-    (function(){
-      const { Engine, Render, Runner, World, Bodies, Body, Events, Composite, Vector, SAT } = Matter;
+    // --- 遊戲設定 ---
+    const FRUITS = [
+      { name: "櫻桃", radius: 16, color: "#ff7675", score: 2,  emoji: "🍒" },
+      { name: "草莓", radius: 24, color: "#fd79a8", score: 4,  emoji: "🍓" },
+      { name: "葡萄", radius: 32, color: "#a29bfe", score: 8,  emoji: "🍇" },
+      { name: "橘子", radius: 38, color: "#ffeaa7", score: 16, emoji: "🍊" },
+      { name: "柿子", radius: 46, color: "#fab1a0", score: 32, emoji: "🥭" },
+      { name: "蘋果", radius: 56, color: "#d63031", score: 64, emoji: "🍎" },
+      { name: "梨子", radius: 66, color: "#55efc4", score: 128, emoji: "🍐" },
+      { name: "桃子", radius: 78, color: "#fdcb6e", score: 256, emoji: "🍑" },
+      { name: "鳳梨", radius: 92, color: "#ffeaa7", score: 512, emoji: "🍍" },
+      { name: "哈密瓜", radius: 106, color: "#00b894", score: 1024, emoji: "🍈" },
+      { name: "西瓜", radius: 120, color: "#00cec9", score: 2048, emoji: "🍉" },
+    ];
 
-      const WIDTH = 400, HEIGHT = 600;
-      const fruitNames = ["🍒","🍓","🍇","🍊","🍐","🍎","🍉"];
-      const baseRadii = [20,25,30,35,40,45,50];
-      const GROWTH_SCALE_PER_LEVEL = 0.16; // 每次合成額外放大 16%
+    const GAME_WIDTH = 450; 
+    const GAME_HEIGHT = 800;
+    const WALL_THICKNESS = 100; // 牆壁做厚一點防止穿透
 
-      // engine & world
-      const engine = Engine.create();
-      engine.gravity.y = 1;
-      const world = engine.world;
+    // --- Matter.js 模組 ---
+    const { Engine, Render, Runner, World, Bodies, Body, Events, Composite, Composite: CompositeUtil } = Matter;
 
-      // canvas & render
-      const canvas = document.getElementById('game');
-      const ctx = canvas.getContext('2d');
+    // --- 初始化變數 ---
+    let engine, render, runner;
+    let currentFruit = null;
+    let nextFruitIndex = 0;
+    let isClickable = true;
+    let score = 0;
+    let particles = [];
+    let canvas, ctx;
+    let guideLine;
 
-      const render = Render.create({
-        canvas: canvas,
-        engine: engine,
-        options: {
-          width: WIDTH,
-          height: HEIGHT,
-          wireframes: false,
-          background: '#fff8e1'
-        }
+    // --- DOM ---
+    const scoreEl = document.getElementById('score');
+    const nextFruitIcon = document.getElementById('next-fruit-icon');
+    const gameOverScreen = document.getElementById('game-over');
+    const restartBtn = document.getElementById('restart-btn');
+    guideLine = document.getElementById('guide-line');
+
+    function init() {
+      // 設置 Canvas
+      canvas = document.getElementById('world');
+      canvas.width = GAME_WIDTH;
+      canvas.height = GAME_HEIGHT;
+      ctx = canvas.getContext('2d');
+
+      // 創建引擎
+      engine = Engine.create();
+      engine.world.gravity.y = 1.2; // 稍微重一點，手感較好
+
+      // 創建渲染器 (我們主要用 Custom Render，這裡只用來掛載，wireframes: false 是關鍵)
+      // 但為了更自由的繪圖，我們下面會自己寫 render loop，這裡不使用 Matter.Render 的預設繪圖
+      
+      // 邊界
+      const ground = Bodies.rectangle(GAME_WIDTH/2, GAME_HEIGHT + WALL_THICKNESS/2 - 10, GAME_WIDTH, WALL_THICKNESS, { 
+        isStatic: true, label: 'ground', render: { fillStyle: '#d63031' } 
       });
-      Render.run(render);
-      const runner = Runner.create();
+      const leftWall = Bodies.rectangle(0 - WALL_THICKNESS/2, GAME_HEIGHT/2, WALL_THICKNESS, GAME_HEIGHT * 2, { 
+        isStatic: true, label: 'wall' 
+      });
+      const rightWall = Bodies.rectangle(GAME_WIDTH + WALL_THICKNESS/2, GAME_HEIGHT/2, WALL_THICKNESS, GAME_HEIGHT * 2, { 
+        isStatic: true, label: 'wall' 
+      });
+
+      // 死線傳感器 (在頂部附近)
+      const topSensor = Bodies.rectangle(GAME_WIDTH/2, 120, GAME_WIDTH, 2, {
+        isStatic: true,
+        isSensor: true,
+        label: 'topSensor',
+        render: { visible: false } // 看不見
+      });
+
+      World.add(engine.world, [ground, leftWall, rightWall, topSensor]);
+
+      // 事件監聽
+      Events.on(engine, 'collisionStart', handleCollisions);
+
+      // 輸入處理
+      canvas.addEventListener('mousemove', updateInput);
+      canvas.addEventListener('touchmove', (e) => { e.preventDefault(); updateInput(e.touches[0]); }, {passive: false});
+      
+      canvas.addEventListener('mouseup', handleInputRelease);
+      canvas.addEventListener('touchend', handleInputRelease);
+
+      restartBtn.addEventListener('click', resetGame);
+
+      // 開始循環
+      runner = Runner.create();
       Runner.run(runner, engine);
+      
+      requestAnimationFrame(renderLoop);
 
-      // static boundaries
-      const ground = Bodies.rectangle(WIDTH/2, HEIGHT + 30, WIDTH, 60, { isStatic: true });
-      const leftWall = Bodies.rectangle(-10, HEIGHT/2, 20, HEIGHT, { isStatic: true });
-      const rightWall = Bodies.rectangle(WIDTH + 10, HEIGHT/2, 20, HEIGHT, { isStatic: true });
-      World.add(world, [ground, leftWall, rightWall]);
+      // 準備第一顆
+      score = 0;
+      updateScore(0);
+      setNextFruit();
+      createNewCurrentFruit();
+    }
 
-      // state
-      let currentFruit = null;
-      let score = 0;
-      let gameOver = false;
-      let fruitIsFalling = false;
+    // --- 遊戲邏輯 ---
 
-      const scoreEl = document.getElementById('score');
-      const gameOverEl = document.getElementById('gameOver');
-      const startBtn = document.getElementById('startBtn');
-      const restartBtn = document.getElementById('restartBtn');
+    function getRandomIndex() {
+      // 只產生前 5 種較小的水果
+      return Math.floor(Math.random() * 5); 
+    }
 
-      // helpers
-      function computeRadius(idx, growthLevel=0) {
-        const base = baseRadii[idx] || 20;
-        return Math.max(8, Math.round(base * (1 + growthLevel * GROWTH_SCALE_PER_LEVEL)));
+    function setNextFruit() {
+      nextFruitIndex = getRandomIndex();
+      const f = FRUITS[nextFruitIndex];
+      // 顯示在 UI 上
+      nextFruitIcon.innerText = f.emoji;
+      nextFruitIcon.style.textShadow = `0 0 10px ${f.color}`;
+    }
+
+    function createNewCurrentFruit() {
+      isClickable = true;
+      // 在頂部生成一個「假」水果用於瞄準 (不是物理實體，只是變數記錄)
+      // 我們會在 render loop 畫出它
+      currentFruit = {
+        x: GAME_WIDTH / 2,
+        y: 60,
+        index: nextFruitIndex,
+        isDropping: false
+      };
+      
+      // 準備下一個
+      setNextFruit();
+      guideLine.style.display = 'block';
+    }
+
+    function updateInput(e) {
+      if (!currentFruit || currentFruit.isDropping) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      
+      let x = (e.clientX - rect.left) * scaleX;
+      
+      // 限制範圍 (不要讓水果跑出牆壁)
+      const r = FRUITS[currentFruit.index].radius;
+      if (x < r + 10) x = r + 10;
+      if (x > GAME_WIDTH - r - 10) x = GAME_WIDTH - r - 10;
+
+      currentFruit.x = x;
+      
+      // 更新輔助線位置
+      guideLine.style.left = (currentFruit.x / GAME_WIDTH * 100) + '%';
+    }
+
+    function handleInputRelease(e) {
+      if (!isClickable || !currentFruit || currentFruit.isDropping) return;
+      isClickable = false;
+      currentFruit.isDropping = true;
+      guideLine.style.display = 'none';
+
+      // 真正創建物理實體
+      const idx = currentFruit.index;
+      const r = FRUITS[idx].radius;
+      
+      const body = Bodies.circle(currentFruit.x, currentFruit.y, r, {
+        restitution: 0.2, // 彈性
+        friction: 0.1,
+        label: 'fruit',
+        render: {
+          fillStyle: FRUITS[idx].color
+        }
+      });
+      
+      // 綁定自定義屬性
+      body.fruitIndex = idx;
+      body.fruitId = Date.now(); // 唯一ID
+
+      World.add(engine.world, body);
+
+      // 延遲後生成下一個
+      currentFruit = null;
+      setTimeout(() => {
+        createNewCurrentFruit();
+      }, 800);
+    }
+
+    function handleCollisions(event) {
+      const pairs = event.pairs;
+
+      for (let i = 0; i < pairs.length; i++) {
+        const bodyA = pairs[i].bodyA;
+        const bodyB = pairs[i].bodyB;
+
+        // 檢查是否是水果合成
+        if (bodyA.label === 'fruit' && bodyB.label === 'fruit') {
+          if (bodyA.fruitIndex === bodyB.fruitIndex) {
+            // 避免重複處理 (Matter.js 同一幀可能觸發多次)
+            if (bodyA.isResolving || bodyB.isResolving) continue;
+            
+            bodyA.isResolving = true;
+            bodyB.isResolving = true;
+            
+            mergeFruits(bodyA, bodyB);
+          }
+        }
+        
+        // 檢查遊戲結束 (碰到頂部死線且速度極慢)
+        // 簡單邏輯：如果有水果長時間停留在死線上方，就結束
+        // 這裡為了簡化，我們在 render loop 裡檢查 Y 軸更直觀
       }
+    }
 
-      function createFruit(x, idx, isStatic = true, growthLevel = 0) {
-        const r = computeRadius(idx, growthLevel);
-        const fruit = Bodies.circle(x, 80, r, {
+    function mergeFruits(a, b) {
+      const midX = (a.position.x + b.position.x) / 2;
+      const midY = (a.position.y + b.position.y) / 2;
+      const nextIdx = a.fruitIndex + 1;
+
+      // 移除舊的
+      World.remove(engine.world, [a, b]);
+      
+      // 特效
+      createParticles(midX, midY, FRUITS[a.fruitIndex].color);
+
+      // 加分
+      const scoreAdd = FRUITS[a.fruitIndex].score; // 用合成前的分數算，或合成後的都可以
+      updateScore(score + scoreAdd);
+
+      if (nextIdx < FRUITS.length) {
+        const r = FRUITS[nextIdx].radius;
+        const newBody = Bodies.circle(midX, midY, r, {
           restitution: 0.2,
-          friction: 0.005,
+          friction: 0.1,
           label: 'fruit',
-          isStatic: !!isStatic
+          render: { fillStyle: FRUITS[nextIdx].color }
         });
-        fruit.fruitIndex = idx;
-        fruit.fruitName = fruitNames[idx];
-        fruit.growthLevel = growthLevel;
-        fruit.radiusBase = r;
-        return fruit;
+        newBody.fruitIndex = nextIdx;
+        World.add(engine.world, newBody);
+        
+        // 給一點推力讓它不會黏在一起
+        // Body.setVelocity(newBody, { x: (Math.random()-0.5)*2, y: -2 });
       }
+    }
 
-      function spawnFruit() {
-        if (gameOver) return;
-        if (currentFruit) return;
-        currentFruit = createFruit(WIDTH/2, 0, true, 0);
-        World.add(world, currentFruit);
-        fruitIsFalling = false;
+    function updateScore(val) {
+      score = val;
+      scoreEl.innerText = score;
+    }
+
+    function createParticles(x, y, color) {
+      for(let i=0; i<8; i++) {
+        particles.push({
+          x: x,
+          y: y,
+          vx: (Math.random() - 0.5) * 10,
+          vy: (Math.random() - 0.5) * 10,
+          life: 30,
+          color: color,
+          size: Math.random() * 6 + 4
+        });
       }
+    }
 
-      // particles (簡單)
-      const particles = [];
-      function spawnParticles(x,y,emoji) {
-        for (let i=0;i<12;i++){
-          particles.push({
-            x,y,
-            vx:(Math.random()-0.5)*4,
-            vy:(Math.random()-1.5)*4,
-            life:30+Math.random()*30,
-            emoji,
-            size:10+Math.random()*10
-          });
-        }
-      }
-      function drawParticles(ctx){
-        for (let i=particles.length-1;i>=0;i--){
-          const p = particles[i];
-          p.x += p.vx;
-          p.y += p.vy;
-          p.vy += 0.15;
-          p.life--;
-          ctx.globalAlpha = Math.max(0, p.life/60);
-          ctx.font = `${p.size}px Arial`;
-          ctx.fillText(p.emoji, p.x, p.y);
-          ctx.globalAlpha = 1;
-          if (p.life<=0) particles.splice(i,1);
-        }
-      }
-
-      // render emoji & particles
-      Events.on(render, 'afterRender', function() {
-        const ctx = render.context;
-        ctx.clearRect(0,0,WIDTH,HEIGHT);
-        ctx.fillStyle = '#fff8e1';
-        ctx.fillRect(0,0,WIDTH,HEIGHT);
-
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const bodies = Composite.allBodies(world);
-        for (let body of bodies) {
-          if (body.fruitIndex !== undefined) {
-            const r = body.radiusBase || 20;
-            const fontSize = Math.max(18, Math.round(r * 1.15));
-            ctx.font = `${fontSize}px Arial`;
-            // shadow
-            ctx.fillStyle = 'rgba(0,0,0,0.08)';
-            ctx.beginPath();
-            ctx.ellipse(body.position.x + 4, body.position.y + r*0.35, r*0.9, r*0.45, 0, 0, Math.PI*2);
-            ctx.fill();
-            // white circle
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(body.position.x, body.position.y, r*0.98, 0, Math.PI*2);
-            ctx.fill();
-            // emoji
-            ctx.fillStyle = '#000';
-            ctx.fillText(body.fruitName, body.position.x, body.position.y + 1);
-          }
-        }
-        drawParticles(ctx);
-      });
-
-      // Merge two bodies: remove 'other', scale/update 'survivor' in-place if possible, return the survivor (or new body)
-      function mergeBodies(survivor, other) {
-        if (!survivor || !other) return null;
-        if (survivor.merging || other.merging) return null;
-        survivor.merging = true;
-        other.merging = true;
-
-        const ia = survivor.fruitIndex;
-        if (ia === undefined || survivor.fruitIndex !== other.fruitIndex) {
-          survivor.merging = false; other.merging = false; return null;
-        }
-        if (ia >= fruitNames.length - 1) {
-          survivor.merging = false; other.merging = false; return null;
-        }
-
-        const newIdx = ia + 1;
-        const newGrowth = Math.max(survivor.growthLevel||0, other.growthLevel||0) + 1;
-        const survivorIsStatic = !!survivor.isStatic;
-        const pos = { x: survivor.position.x, y: survivor.position.y };
-        const vel = { x: survivor.velocity?.x || 0, y: survivor.velocity?.y || 0 };
-
-        console.log(`MERGE: merging other ${other.id} into survivor ${survivor.id} -> idx ${newIdx}`);
-
-        // remove other immediately
-        try { World.remove(world, other); } catch(e){ console.warn('remove other failed', e); }
-
-        // compute radii & scale factor
-        const oldR = survivor.radiusBase || computeRadius(ia, survivor.growthLevel || 0);
-        const targetR = computeRadius(newIdx, newGrowth);
-        const scaleFactor = targetR / oldR;
-
-        // try to scale in-place
-        try {
-          Body.scale(survivor, scaleFactor, scaleFactor);
-          // update survivor props
-          survivor.fruitIndex = newIdx;
-          survivor.fruitName = fruitNames[newIdx];
-          survivor.growthLevel = newGrowth;
-          survivor.radiusBase = targetR;
-          Body.setStatic(survivor, survivorIsStatic);
-          if (!survivorIsStatic) Body.setVelocity(survivor, vel);
-          else Body.setVelocity(survivor, { x:0, y:0 });
-          // update bounds (ensure SAT sees updated shape)
-          // re-position to same place to trigger bounds update
-          Body.setPosition(survivor, pos);
-          spawnParticles(pos.x, pos.y, fruitNames[newIdx]);
-          score += (newIdx + 1) * 10;
-          scoreEl.textContent = `分數：${score}`;
-          console.log(`MERGE succeeded: survivor ${survivor.id} -> idx ${newIdx}, growth ${newGrowth}`);
-          // clear merging flag quickly
-          survivor.merging = false;
-          return survivor;
-        } catch (err) {
-          console.warn('Body.scale failed, fallback replace-in-place', err);
-        }
-
-        // fallback: replace survivor with new body at same pos
-        try { World.remove(world, survivor); } catch(e){ console.warn('fallback remove survivor failed', e); }
-        const nf = createFruit(pos.x, newIdx, survivorIsStatic, newGrowth);
-        if (!survivorIsStatic) Body.setVelocity(nf, vel);
-        else Body.setVelocity(nf, { x:0, y:0 });
-        World.add(world, nf);
-        spawnParticles(pos.x, pos.y, fruitNames[newIdx]);
-        score += (newIdx + 1) * 10;
-        scoreEl.textContent = `分數：${score}`;
-        console.log(`MERGE fallback created new body id:${nf.id} idx:${newIdx}`);
-        // clear merging on new body after a tick
-        setTimeout(()=> { try{ nf.merging = false; } catch(e){} }, 20);
-        return nf;
-      }
-
-      // After a merge on a survivor, immediately check all bodies for SAT overlap and chain-merge until none
-      function chainMergeIfNeeded(initialSurvivor) {
-        let survivor = initialSurvivor;
-        if (!survivor) return;
-        // loop: scan for any body that currently collides with survivor and has same index
-        let changed = true;
-        // small safety counter to avoid infinite loops
-        let safety = 0;
-        while (changed && safety < 30) {
-          changed = false;
-          safety++;
-          const all = Composite.allBodies(world);
-          for (let b of all) {
-            if (b === survivor) continue;
-            if (b.fruitIndex === undefined) continue;
-            if (b.fruitIndex !== survivor.fruitIndex) continue;
-            // use SAT to check collision/overlap immediately
-            try {
-              const C = SAT.collides(survivor, b);
-              if (C.collided) {
-                console.log(`CHAIN: found overlapping neighbor ${b.id} for survivor ${survivor.id}, merging...`);
-                const newSurv = mergeBodies(survivor, b);
-                if (newSurv) {
-                  survivor = newSurv;
-                  changed = true;
-                  // break to restart scanning with updated survivor index/shape
-                  break;
-                }
-              }
-            } catch (e) {
-              console.warn('SAT.collides error', e);
-            }
+    function checkGameOver() {
+      if (!isClickable) return; // 只有在可以下蛋的時候才檢查靜止的水果
+      const bodies = Composite.allBodies(engine.world);
+      
+      for (let body of bodies) {
+        if (body.label === 'fruit') {
+          // 如果有水果溢出警戒線 (y < 120) 且速度很慢 (表示堆疊起來了)
+          if (body.position.y < 100 && body.speed < 0.2) {
+             // Game Over
+             gameOverScreen.style.display = 'flex';
+             isClickable = false;
+             currentFruit = null;
+             guideLine.style.display = 'none';
+             Runner.stop(runner);
+             return;
           }
         }
       }
+    }
 
-      // collisionStart: detect merge opportunity, perform merge + chain
-      Events.on(engine, 'collisionStart', function(event) {
-        const pairs = event.pairs;
-        for (let pair of pairs) {
-          const A = pair.bodyA, B = pair.bodyB;
-          if (A.fruitIndex === undefined || B.fruitIndex === undefined) continue;
-          const ia = A.fruitIndex, ib = B.fruitIndex;
-          if (ia !== ib) continue;
-          if (ia >= fruitNames.length - 1) continue; // max
-          // skip if processing
-          if (A.merging || B.merging) continue;
+    function resetGame() {
+      World.clear(engine.world);
+      Engine.clear(engine);
+      
+      // 重新加牆壁
+      const ground = Bodies.rectangle(GAME_WIDTH/2, GAME_HEIGHT + WALL_THICKNESS/2 - 10, GAME_WIDTH, WALL_THICKNESS, { isStatic: true, label: 'ground' });
+      const leftWall = Bodies.rectangle(0 - WALL_THICKNESS/2, GAME_HEIGHT/2, WALL_THICKNESS, GAME_HEIGHT * 2, { isStatic: true, label: 'wall' });
+      const rightWall = Bodies.rectangle(GAME_WIDTH + WALL_THICKNESS/2, GAME_HEIGHT/2, WALL_THICKNESS, GAME_HEIGHT * 2, { isStatic: true, label: 'wall' });
+      World.add(engine.world, [ground, leftWall, rightWall]);
 
-          // choose survivor (prefer static)
-          function speedOf(x){ return Math.hypot((x.velocity?.x)||0, (x.velocity?.y)||0); }
-          let survivor = null, other = null;
-          if (A.isStatic && !B.isStatic) { survivor = A; other = B; }
-          else if (B.isStatic && !A.isStatic) { survivor = B; other = A; }
-          else {
-            survivor = speedOf(A) <= speedOf(B) ? A : B;
-            other = survivor === A ? B : A;
-          }
+      particles = [];
+      score = 0;
+      updateScore(0);
+      gameOverScreen.style.display = 'none';
+      
+      runner = Runner.create();
+      Runner.run(runner, engine);
+      
+      createNewCurrentFruit();
+    }
 
-          console.log(`MERGE detected: idx=${ia} -> newIdx=${ia+1}; survivor=${survivor.id}, other=${other.id}`);
+    // --- 渲染循環 (Custom Render) ---
+    function renderLoop() {
+      // 清空畫布
+      ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-          const newSurv = mergeBodies(survivor, other);
-          if (newSurv) {
-            // Immediately check & chain merge using SAT overlap
-            chainMergeIfNeeded(newSurv);
-          }
+      // 畫輔助線 (雖然 CSS 畫了，但這裡可以畫一條從上到下的透明線增加質感)
+      // (省略，用 CSS 的 guide-line 即可)
+
+      // 畫物理實體
+      const bodies = Composite.allBodies(engine.world);
+      ctx.lineWidth = 2;
+      
+      for (let body of bodies) {
+        if (body.label === 'fruit') {
+          drawFruit(body.position.x, body.position.y, body.angle, body.fruitIndex);
         }
-      });
-
-      // afterUpdate: cleanup & game over check
-      Events.on(engine, 'afterUpdate', function() {
-        if (currentFruit && fruitIsFalling && currentFruit.position.y > 120) {
-          currentFruit = null;
-          fruitIsFalling = false;
-        }
-        for (let b of Composite.allBodies(world)) {
-          if (b.fruitIndex !== undefined) {
-            if ((b.position.y - (b.radiusBase || 20)) < 6) {
-              endGame();
-              break;
-            }
-            if (b.position.y > HEIGHT + 400) {
-              try { World.remove(world, b); } catch(e){}
-            }
-          }
-        }
-      });
-
-      // keyboard & click
-      document.addEventListener('keydown', function(e) {
-        if (gameOver) return;
-        if (e.key === ' ') {
-          if (!currentFruit) spawnFruit();
-          e.preventDefault();
-          return;
-        }
-        if (!currentFruit) return;
-        if (!fruitIsFalling) {
-          if (e.key === 'ArrowLeft') Body.translate(currentFruit, { x: -28, y: 0 });
-          else if (e.key === 'ArrowRight') Body.translate(currentFruit, { x: 28, y: 0 });
-          else if (e.key === 'ArrowDown') { Body.setStatic(currentFruit, false); fruitIsFalling = true; }
-        } else {
-          if (e.key === 'ArrowDown') Body.setVelocity(currentFruit, { x: 0, y: 10 });
-        }
-      });
-
-      window.addEventListener('click', spawnFruit);
-
-      function startGame() {
-        gameOver = false;
-        score = 0;
-        scoreEl.textContent = '分數：0';
-        gameOverEl.style.display = 'none';
-        const all = Composite.allBodies(world).slice();
-        for (let b of all) {
-          if (b.fruitIndex !== undefined) {
-            try { World.remove(world, b); } catch(e){}
-          }
-        }
-        currentFruit = null;
-        fruitIsFalling = false;
-        Runner.run(runner, engine);
-        try { canvas.focus(); } catch(e){}
-        console.log('Game started. spawn with SPACE or click the canvas. Open F12 to view merge logs.');
       }
 
-      function endGame() {
-        if (gameOver) return;
-        gameOver = true;
-        gameOverEl.style.display = 'block';
-        Runner.stop(runner);
+      // 畫手上的水果 (Current Fruit)
+      if (currentFruit && !currentFruit.isDropping) {
+        drawFruit(currentFruit.x, currentFruit.y, 0, currentFruit.index, 1.0); // 1.0 opacity
       }
 
-      startBtn.addEventListener('click', startGame);
-      restartBtn.addEventListener('click', startGame);
+      // 畫粒子
+      updateAndDrawParticles();
 
-      startGame();
-      canvas.addEventListener('click', function(){ try{ canvas.focus(); }catch(e){} });
-    })();
+      // 檢查遊戲結束
+      checkGameOver();
+
+      requestAnimationFrame(renderLoop);
+    }
+
+    function drawFruit(x, y, angle, index, alpha = 1) {
+      const f = FRUITS[index];
+      const r = f.radius;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.globalAlpha = alpha;
+
+      // 1. 陰影
+      ctx.beginPath();
+      ctx.arc(2, 4, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.1)';
+      ctx.fill();
+
+      // 2. 本體
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fillStyle = f.color;
+      ctx.fill();
+      
+      // 3. 內發光/高光 (讓它看起來像球體)
+      const grad = ctx.createRadialGradient(-r*0.3, -r*0.3, r*0.2, 0, 0, r);
+      grad.addColorStop(0, 'rgba(255,255,255,0.3)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // 4. 邊框 (卡通感)
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // 5. 畫臉 (簡單的眼睛嘴巴)
+      drawFace(ctx, r);
+
+      // 6. Debug Emoji (如果想看這是什麼水果)
+      // ctx.fillStyle = '#fff';
+      // ctx.font = `${r}px Arial`;
+      // ctx.fillText(f.emoji, -r/2, r/3);
+
+      ctx.restore();
+    }
+
+    function drawFace(ctx, r) {
+      ctx.fillStyle = '#5d4037';
+      
+      // 眼睛
+      const eyeX = r * 0.3;
+      const eyeY = r * -0.1;
+      const eyeSize = r * 0.15;
+      
+      // 左眼
+      ctx.beginPath();
+      ctx.arc(-eyeX, eyeY, eyeSize, 0, Math.PI*2);
+      ctx.fill();
+      // 右眼
+      ctx.beginPath();
+      ctx.arc(eyeX, eyeY, eyeSize, 0, Math.PI*2);
+      ctx.fill();
+
+      // 嘴巴 (微笑)
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.25, 0.2 * Math.PI, 0.8 * Math.PI);
+      ctx.stroke();
+    }
+
+    function updateAndDrawParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.5; // gravity
+        p.life--;
+
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        ctx.globalAlpha = p.life / 30;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // 啟動
+    init();
+
   </script>
 </body>
 </html>
